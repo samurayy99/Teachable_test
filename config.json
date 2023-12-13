@@ -1,9 +1,5 @@
 {
-    "aws": {
-        "access_key_id": "YOUR_AWS_ACCESS_KEY_ID",
-        "secret_access_key": "YOUR_AWS_SECRET_ACCESS_KEY",
-        "region": "YOUR_AWS_REGION"
-    },
+    
     "openai": {
         "api_key": "YOUR_OPENAI_API_KEY"
     },
@@ -68,9 +64,5 @@
             "collect_user_feedback": true,
             "feedback_evaluation_period": "30d"
         }
-    },
-    "testing": {
-        "validation_data": "path/to/validation_data.json",
-        "evaluation_function": "path/to/evaluation_script.py"
-    }
-}
+
+}}

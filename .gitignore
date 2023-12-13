@@ -2,4 +2,4 @@ env/
 .cache/
 tmp/
 .env
-.aider*
+.aider

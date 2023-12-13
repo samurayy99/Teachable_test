@@ -4,6 +4,7 @@ import os
 import logging
 import time
 import random
+import uuid  # Import the UUID module for generating conversation IDs
 
 # Third-party imports
 from dotenv import load_dotenv
@@ -14,7 +15,10 @@ import openai  # Assuming openai is a third-party package
 import pandas as pd
 from sqlalchemy import create_engine
 
-
+# NLTK imports
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
 
 # Local/application-specific imports
 import autogen
@@ -22,15 +26,16 @@ from autogen import config_list_from_json
 from autogen.agentchat.contrib.gpt_assistant_agent import GPTAssistantAgent
 from autogen import UserProxyAgent
 from tenacity import retry, stop_after_attempt, wait_exponential
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
-from sklearn.feature_extraction.text import TfidfVectorizer
-import nltk
 
+# Download NLTK data
 nltk.download('punkt')
 nltk.download('stopwords')
-USER_DATA_STORE = "user_data_store.json"
 
+# Define constants
+USER_DATA_STORE = "user_data_store.json"
+PREMIUM_THRESHOLD = 1000  # Define the premium account balance threshold
+
+# Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Load configurations from environment and JSON
@@ -42,8 +47,8 @@ def load_configurations():
     """
     load_dotenv()
     with open('config.json') as config_file:
-        config_list = json.load(config_file)
-    config = config_list[0]  # Use the first configuration
+        config = json.load(config_file)
+
     config['openai'] = {
         'api_key': os.getenv('OPENAI_API_KEY', config.get('api_key'))  # Securely fetch API key
     }
@@ -54,6 +59,7 @@ def load_configurations():
     return config
 
 config = load_configurations()
+
 
 
 class GroupManager:
@@ -366,31 +372,31 @@ class TeachableAgentWithLLMSelection:
         # In a real-world scenario, this could involve a secrets manager like AWS Secrets Manager or HashiCorp Vault
 
         messages = [{"role": "user", "content": user_input}]
-        payload = {"model": "gpt-4-1106-preview", "messages": messages}
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+      #  payload = {"model": "gpt-4-1106-preview", "messages": messages}
+      #  headers = {"Authorization": f"Bearer {self.api_key}"}
 
-        try:
-            @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=60))
-            def call_openai_api(self, user_input):
-                messages = [{"role": "user", "content": user_input}]
-                payload = {"model": "gpt-4-1106-preview", "messages": messages}
-                headers = {"Authorization": f"Bearer {self.api_key}"}
+      #  try:
+      #      @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=60))
+      #      def call_openai_api(self, user_input):
+      #          messages = [{"role": "user", "content": user_input}]
+      #          payload = {"model": "gpt-4-1106-preview", "messages": messages}
+      #          headers = {"Authorization": f"Bearer {self.api_key}"}
 
-                response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-                if response.status_code == 200:
-                    return response.json()['choices'][0]['message']['content']
-                elif response.status_code == 429:
-                    raise RateLimitExceededError("Rate limit exceeded")
-                else:
-                    raise APIError(f"Error in API response: {response.status_code}, {response.text}")
-            return exponential_backoff_retry(api_call)
-        except RateLimitExceededError as e:
-            return f"Rate limit exceeded: {str(e)}"
-        except APIError as e:
-            return str(e)
-        except Exception as e:
-            logging.error(f"Unexpected error: {str(e)}", exc_info=True)
-            return f"Unexpected error: {str(e)}"
+      #          response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+      #          if response.status_code == 200:
+      #              return response.json()['choices'][0]['message']['content']
+      #          elif response.status_code == 429:
+      #              raise RateLimitExceededError("Rate limit exceeded")
+      #          else:
+      #              raise APIError(f"Error in API response: {response.status_code}, {response.text}")
+      #      return exponential_backoff_retry(api_call)
+      #  except RateLimitExceededError as e:
+      #      return f"Rate limit exceeded: {str(e)}"
+      #  except APIError as e:
+      #      return str(e)
+      #  except Exception as e:
+      #      logging.error(f"Unexpected error: {str(e)}", exc_info=True)
+      #      return f"Unexpected error: {str(e)}"
     
     def process_feedback(self, feedback):
         # Example processing logic: Validate and parse the feedback
