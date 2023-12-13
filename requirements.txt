@@ -1,0 +1,10 @@
+python-dotenv
+requests
+matplotlib
+seaborn
+openai
+pandas
+sqlalchemy
+tenacity
+nltk
+scikit-learn
