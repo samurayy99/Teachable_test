@@ -1,0 +1,10 @@
+{
+    "finance": {
+        "investing": "InvestingAdvisor",
+        "trading": "TradingAdvisor",   
+        "budget": "BudgetAdvisor",
+        "debt": "DebtAdvisor",
+        "crypto": "CryptoAdvisor",
+        "financial_plan": "FinancialPlanner"
+    }
+}
