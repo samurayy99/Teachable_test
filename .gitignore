@@ -1,1 +1,5 @@
 env/
+.cache/
+tmp/
+.env
+.aider*
