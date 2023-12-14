@@ -2,39 +2,22 @@
 import json
 import os
 import logging
-import time
-import random
-import uuid  # Import the UUID module for generating conversation IDs
+import time  # Added import for time
 
 # Third-party imports
 from dotenv import load_dotenv
 import requests
-import matplotlib.pyplot as plt
-import seaborn as sns
-import openai  # Assuming openai is a third-party package
 import pandas as pd
 from sqlalchemy import create_engine
+import matplotlib.pyplot as plt  # Added import for matplotlib
+import seaborn as sns  # Added import for seaborn
+import nltk  # Added import for nltk
+from nltk.tokenize import word_tokenize  # Added specific import for tokenize
+from nltk.corpus import stopwords  # Added specific import for stopwords
 
-# NLTK imports
-import nltk
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
-
-# Local/application-specific imports
-import autogen
-from autogen import config_list_from_json
-from autogen.agentchat.contrib.gpt_assistant_agent import GPTAssistantAgent
-from autogen import UserProxyAgent
-# from tenacity import retry, stop_after_attempt, wait_exponential
-
-
-# Download NLTK data
-nltk.download('punkt')
-nltk.download('stopwords')
-
-# Define constants
-USER_DATA_STORE = "user_data_store.json"
-PREMIUM_THRESHOLD = 1000  # Define the premium account balance threshold
+# Assuming 'openai' and 'autogen' are correctly installed or available in your environment
+import openai  # Added import for openai
+import autogen  # Added import for autogen
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -59,8 +42,6 @@ def load_configurations():
 
 config = load_configurations()
 
-
-
 class GroupManager:
     """
     Manages a group of specialized agents.
@@ -73,14 +54,11 @@ class GroupManager:
         self.advisors = {}
         self.load_advisor_config()
 
-
-
     def load_advisor_config(self):
         """
         Load advisor configurations and initialize advisors.
         """
         try:
-            # Load configuration from a file or database
             with open('advisor_config.json', 'r') as file:
                 config = json.load(file)
 
@@ -92,23 +70,6 @@ class GroupManager:
             self.logger.info("Advisors initialized from configuration.")
         except Exception as e:
             self.logger.error(f"Error loading advisor configuration: {e}")
-
-     def initialize_advisors(self):
-         """
-    #     Initialize advisors with default types.
-    #     """
-         advisors = {
-             "finance": {
-                 "investing": AdvisorFactory.create_advisor("InvestingAdvisor"),
-                 "trading": AdvisorFactory.create_advisor("TradingAdvisor"),
-                 "debt": AdvisorFactory.create_advisor("DebtAdvisor"),  
-                 "crypto": AdvisorFactory.create_advisor("CryptoAdvisor"),
-                 "financial_plan": AdvisorFactory.create_advisor("FinancialPlanner") 
-             }
-             # Add other specialized agents here...
-         }
-         self.logger.info("Initialized advisors: %s", advisors.keys())
-         return advisors
 
     def add_advisor(self, category, keyword, advisor_type):
         """
@@ -142,104 +103,59 @@ class GroupManager:
         else:
             self.logger.warning("Advisor or category not found: %s in %s", keyword, category)
             return None
-    
-    # Define functions to fetch user and conversation details
-    def get_user_metadata(user_id):
-        # Fetch user details from the database
-        # Example:
-        user = user_db.get(user_id)
-        is_premium = user.account_balance > PREMIUM_THRESHOLD
-        return {
-            "user_id": user_id,
-            "username": user.name,
-            "is_premium": is_premium,
-            "user_attributes": user.attributes
-        }
 
-    def get_conversation_metadata():
-        # Generate a unique ID for the conversation
-        # Example:
-        return {
-            "conversation_id": uuid.uuid4().hex,
-            "conversation_topic": detect_conversation_topic()
-        }
-
-    def handle_query(self, user_input, chat_history):
-        # Fetch user and conversation metadata
-        user_id = self.get_user_id()
-        user_metadata = self.get_user_metadata(user_id)
-        conversation_metadata = self.get_conversation_metadata()
-
+# Define functions for handling queries and logging
+class QueryHandler:
+    def handle_query(self, user_input):
+        """
+        Process the user query and obtain a response.
+        Args:
+            user_input: The input query from the user.
+        Returns:
+            A string response for the user.
+        """
         # Process the query and obtain a response
-        response = self.process_user_input(user_input, chat_history)  # Replace with the appropriate method
+        response = self.process_user_input(user_input)  # Replace with the appropriate method
+        return response
 
-        # Append user input with metadata to chat history
-        chat_history.append({
-            "role": "user",
-            "content": user_input,
-            "timestamp": time.time(),
-            "sentiment": self.analyze_sentiment(user_input),
-            "metadata": {**user_metadata, **conversation_metadata}
-        })
-
-        # Append assistant response to chat history
-        chat_history.append({
-            "role": "assistant",
-            "content": response,
-            "timestamp": time.time(),
-            "metadata": {**user_metadata, **conversation_metadata}
-        })
-
-        return response 
-
-
-    def handle_fallback_query(self, user_input, chat_history):
+    def handle_fallback_query(self, user_input):
         """
         Handle queries that do not match any specific financial category.
         Args:
             user_input: The input query from the user.
-            chat_history: The chat history for context.
         Returns:
             A string response for the user.
         """
-        # Check if the query is related to finance
-        if is_finance_related(user_input):
-            # Provide a generic financial advice or information
-            response = "I'm here to help with your financial queries. Could you please provide more details or ask a different finance-related question?"
+        if self.is_finance_related(user_input):
+            response = "I'm here to help with your financial queries. Could you please provide more details?"
         else:
-            # If the query is unrelated to finance
-            response = ("While I specialize in finance, I'm here to help in any way I can. "
-                        "For non-finance related queries, I might have limited advice. "
-                        "Also, feel free to suggest any features or topics you'd like to see in future updates.")
-            # Log the suggestion for future reference
-            log_suggestion(user_input, chat_history)
-
-        # Record unresponsive or off-topic interactions
-        log_unresponsive_interaction(user_input, response, chat_history)
-
+            response = "While I specialize in finance, I'm here to help in any way I can. For non-finance related queries, I might have limited advice."
         return response
 
-    def is_finance_related(user_input):
-        # Implement logic to determine if the query is related to finance
-        # Example: Check for financial keywords or use a classification model
+    def is_finance_related(self, user_input):
+        """
+        Determine if the query is related to finance.
+        Args:
+            user_input: The input query from the user.
+        Returns:
+            bool: True if the query is finance-related, False otherwise.
+        """
         return 'finance' in user_input.lower()  # Simplified example
 
-    def log_suggestion(user_input, chat_history):
-        # Implement logic to log user suggestions for future updates
-        # Example: Store in a database or a file
-        logging.info(f"User suggestion logged: {user_input}")
-
-    def log_unresponsive_interaction(user_input, response, chat_history):
-        # Log interactions where the agent couldn't provide a relevant response
-        chat_history.append({
-            "role": "unresponsive",
-            "user_input": user_input,
-            "response": response,
-            "timestamp": time.time()
-        })
+    def log_unresponsive_interaction(self, user_input, response):
+        """
+        Log interactions where the agent couldn't provide a relevant response.
+        Args:
+            user_input: The user input query.
+            response: The response provided by the agent.
+        """
         logging.warning(f"Unresponsive interaction logged: User input: {user_input}, Response: {response}")
 
-    # Example implementation of AdvisorFactory
+    # Dummy method to represent query processing, replace with your actual method
+    def process_user_input(self, user_input):
+        return "Processed response for: " + user_input
+
+# AdvisorFactory for creating instances of specialized advisors
 class AdvisorFactory:
     """
     Factory class for creating instances of specialized advisors.
@@ -248,23 +164,31 @@ class AdvisorFactory:
 
     @staticmethod
     def create_advisor(advisor_type):
+        """
+        Create and cache advisor instances based on their type.
+        Args:
+            advisor_type: The type of advisor to create.
+        Returns:
+            An instance of the requested advisor type.
+        """
         if advisor_type in AdvisorFactory.advisor_cache:
             return AdvisorFactory.advisor_cache[advisor_type]
         
-        elif advisor_type == "InvestingAdvisor":
-            advisor = InvestingAdvisor()
-            
-        elif advisor_type == "TradingAdvisor":
-            advisor = TradingAdvisor()
-            
-        elif advisor_type == "DefaultFinanceAdvisor":
-            advisor = DefaultFinanceAdvisor()
-
+        if advisor_type == "FinancialAdvisor":
+            advisor = FinancialAdvisor()
+        elif advisor_type == "CryptoAdvisor":
+            advisor = CryptoAdvisor()
+        elif advisor_type == "FinancialPlanner":
+            advisor = FinancialPlanner()
+        elif advisor_type == "DebtRepairAdvisor":
+            advisor = DebtRepairAdvisor()
         else:
             raise ValueError("Invalid advisor type")
+
         AdvisorFactory.advisor_cache[advisor_type] = advisor
         return advisor
-# Example Advisor classes
+
+# Advisor classes providing specialized advice
 class FinancialAdvisor:
     def advise(self, query):
         return f"Financial advice for query: {query}"
@@ -275,12 +199,12 @@ class CryptoAdvisor:
 
 class FinancialPlanner:
     def advise(self, query):
-        return f"Financial plan for query: {query}"
+        return f"Financial planning for query: {query}"
 
 class DebtRepairAdvisor:
     def advise(self, query):
         return f"Debt repair advice for query: {query}"
- 
+
 class TeachableAgentWithLLMSelection:
     def __init__(self, name, llm_config, teach_config, group_manager):
         self.name = name
@@ -289,72 +213,42 @@ class TeachableAgentWithLLMSelection:
         self.config = load_configurations()
         self.group_manager = group_manager
         self.api_key = self.config['openai']['api_key']
-        self.coder = GPTAssistantAgent("coder", llm_config=self.llm_config, instructions="You are a coder.")
-        self.analyst = GPTAssistantAgent("analyst", llm_config=self.llm_config, instructions="You are an analyst.")
 
     def load_feedback_dataset(self):
-        try:
-            with open('feedback_data.json', 'r') as file:
-                feedback_dataset = json.load(file)
-            if not isinstance(feedback_dataset, list) or not all(
-                isinstance(entry, dict) and 'user_input' in entry and 'agent_response' in entry
-                for entry in feedback_dataset
-            ):
-                logging.error("Invalid structure in feedback data file.")
-                return []
-            return feedback_dataset
-        except FileNotFoundError:
-            logging.error("Feedback data file not found.")
-            return []
-        except json.JSONDecodeError:
-            logging.error("Error decoding feedback data file.")
-            return []
-
-    def update_knowledge_base(self, feedback_dataset):
-        for feedback in feedback_dataset:
-            # Placeholder for updating knowledge base
-            pass
-
-    def use_learned_knowledge(self):
-        # Placeholder for using learned knowledge
+        # Logic to load feedback data, if relevant to your use case
         pass
 
-    def learn_from_user_feedback(self):
-        if not self.config['test_mode']:
-            feedback_dataset = self.load_feedback_dataset()
-            self.update_knowledge_base(feedback_dataset)
-        else:
-            self.use_learned_knowledge()
+    def update_knowledge_base(self, feedback_dataset):
+        # Logic to update knowledge base based on user feedback
+        pass
 
-    def respond_to_user(self, user_input, chat_history):
-        response = self.group_manager.handle_query(user_input, chat_history)
+    def respond_to_user(self, user_input):
+        """
+        Provide a response to the user input.
+        Args:
+            user_input: The query from the user.
+        Returns:
+            The response string.
+        """
+        response = self.group_manager.handle_query(user_input)
         return response if response else "No relevant data found."
 
     def process_and_store_feedback(self, user_input, agent_response):
-        if not isinstance(user_input, str) or not isinstance(agent_response, str):
-            logging.error("Invalid data types for user input or agent response.")
-            return
+        # Logic to process and store feedback, if relevant
+        pass
 
-        feedback_entry = {
-            'user_input': user_input,
-            'agent_response': agent_response
-        }
-
-        try:
-            with open('feedback_data.json', 'a') as file:
-                json.dump(feedback_entry, file)
-                file.write('\n')
-        except IOError as e:
-            logging.error(f"Error writing feedback data: {e}")
     def close_db(self):
-    # Close database connections if any
-    # Example:
-        if self.database_engine:
-            self.database_engine.dispose()
-        logging.info("Database connections closed.")
+        # Close any database connections, if relevant
+        pass
 
-    
 def call_openai_api(self, user_input):
+    """
+    Call the OpenAI API to get a response.
+    Args:
+        user_input: The user input string.
+    Returns:
+        The API response.
+    """
     try:
         messages = [{"role": "user", "content": user_input}]
         payload = {"model": "gpt-4-1106-preview", "messages": messages}
@@ -367,26 +261,31 @@ def call_openai_api(self, user_input):
             logging.error("API rate limit exceeded. Please try again later.")
             return "API rate limit exceeded. Please try again later."
         else:
-            raise APIError(f"Error in API response: {response.status_code}, {response.text}")
+            raise Exception(f"Error in API response: {response.status_code}, {response.text}")
     except Exception as e:
         logging.error(f"Unexpected error: {str(e)}", exc_info=True)
         return f"Unexpected error: {str(e)}"
 
-
-
-
-    
-    def process_feedback(self, feedback):
-        # Example processing logic: Validate and parse the feedback
-        if not isinstance(feedback, dict) or 'user_input' not in feedback or 'agent_response' not in feedback:
+def process_feedback(self, feedback):
+        """
+        Process the feedback.
+        Args:
+            feedback: The feedback dictionary.
+        Returns:
+            Processed feedback or None if invalid.
+        """
+        if not isinstance(feedback, dict):
             logging.error("Invalid feedback format")
             return None
-        return {
-            'user_input': feedback['user_input'].strip(),
-            'agent_response': feedback['agent_response'].strip()
-        }
+        return {k: v.strip() for k, v in feedback.items() if k in ['user_input', 'agent_response']}
 
-    def log_interaction(self, user_input, agent_response):
+def log_interaction(self, user_input, agent_response):
+        """
+        Log the interaction between the user and the agent.
+        Args:
+            user_input: The input from the user.
+            agent_response: The response from the agent.
+        """
         log_entry = {
             "user_input": user_input,
             "agent_response": agent_response,
@@ -395,41 +294,17 @@ def call_openai_api(self, user_input):
         with open('interaction_log.txt', 'a') as file:
             file.write(json.dumps(log_entry) + '\n')
 
-    def perform_health_check(self):
-        # Check database connectivity
-        try:
-            engine = create_engine('postgresql://username:password@host:port/database')
-            with engine.connect() as conn:
-                conn.execute("SELECT 1")
-            return "Database connection is healthy"
-        except Exception as e:
-            return f"Database health check failed: {e}"
+def clean_and_preprocess_data(self, data):
+        """
+        Clean and preprocess the data.
+        Args:
+            data: The data dictionary.
+        Returns:
+            Cleaned data.
+        """
+        return {k: v.strip() for k, v in data.items()}
 
-    def clean_and_preprocess_data(self, data):
-        # Example cleaning/preprocessing logic
-        cleaned_data = {key: value.strip() for key, value in data.items()}
-        return cleaned_data
-
-    def process_and_store_feedback(self, user_input, agent_response):
-        feedback_entry = {
-            'user_input': user_input,
-            'agent_response': agent_response
-        }
-        processed_feedback = self.clean_and_preprocess_data(feedback_entry)
-        try:
-            engine = create_engine('postgresql://username:password@host:port/database')
-            pd.DataFrame([processed_feedback]).to_sql('feedback_data', engine, if_exists='append', index=False)
-        except Exception as e:
-            logging.error(f"Error storing feedback data: {e}")
-
-    def load_data_for_training(self):
-        try:
-            engine = create_engine('postgresql://username:password@host:port/database')
-            return pd.read_sql('SELECT * FROM feedback_data', engine)
-        except Exception as e:
-            logging.error(f"Error loading data for training: {e}")
-            return pd.DataFrame()
-
+# Custom exception for API errors
 class APIError(Exception):
     pass
 
@@ -442,122 +317,81 @@ class CryptoAdvisor:
         return f'{base_url}?function={function}&from_currency={from_currency}&to_currency={to_currency}&apikey={CryptoAdvisor.ALPHA_VANTAGE_API_KEY}'
 
     def fetch_crypto_data(self, crypto_name, to_currency='USD'):
-        """
-        Fetches cryptocurrency data.
-
-        Args:
-            crypto_name (str): The name of the cryptocurrency.
-            to_currency (str): The target currency (default is USD).
-
-        Returns:
-            dict: JSON response from the API or None in case of failure.
-        """
         url = CryptoAdvisor.construct_alpha_vantage_url('CURRENCY_EXCHANGE_RATE', crypto_name, to_currency)
-        
         try:
             response = requests.get(url)
-            response.raise_for_status()  # Raises an HTTPError if the HTTP request returned an unsuccessful status code
+            response.raise_for_status()
             return response.json()
-        except requests.exceptions.HTTPError as e:
-            logging.error(f"HTTPError in API call: {e}, URL: {url}")
-        except requests.exceptions.ConnectionError as e:
-            logging.error(f"ConnectionError in API call: {e}, URL: {url}")
-        except requests.exceptions.Timeout as e:
-            logging.error(f"TimeoutError in API call: {e}, URL: {url}")
-        except requests.exceptions.RequestException as e:
-            logging.error(f"RequestException in API call: {e}, URL: {url}")
         except Exception as e:
-            logging.error(f"Unexpected error in API call: {str(e)}, URL: {url}")
+            logging.error(f"Error in API call: {str(e)}, URL: {url}")
         return None
 
-
     def advise_on_crypto(self, query):
-        crypto_name = query.split()[0]  # simplistic extraction
+        crypto_name = query.split()[0]  # Simplified extraction
         crypto_data = self.fetch_crypto_data(crypto_name)
         if crypto_data is None:
             return "Unable to fetch cryptocurrency data."
-        # Implement logic to analyze data and provide advice
         exchange_rate = crypto_data.get("Realtime Currency Exchange Rate", {}).get("5. Exchange Rate", "No data")
-        advice = f"The current exchange rate of {crypto_name} is {exchange_rate}."
-        return advice
-
+        return f"The current exchange rate of {crypto_name} is {exchange_rate}."
+    
 class FinancialPlanner:
     def create_financial_plan(self, user_data):
-        # user_data should contain information like income, expenses, savings, financial goals, etc.
-        # Implement logic to analyze user's financial data and suggest a plan
+        """
+        Create a financial plan based on user data.
+        Args:
+            user_data: Information about the user's finances.
+        Returns:
+            A string containing the financial plan.
+        """
         savings_plan = "Savings Plan: Save 20% of monthly income."
         investment_plan = "Investment Plan: Diversify investments across stocks and bonds."
         return f"{savings_plan}\n{investment_plan}"
 
-
 class DebtRepairAdvisor:
     def provide_debt_repair_advice(self, debt_info):
-        # debt_info should contain details about user's debts
-        # Implement logic for creating a repayment plan or debt reduction strategy
+        """
+        Provide advice on debt repair.
+        Args:
+            debt_info: Information about the user's debts.
+        Returns:
+            A string containing debt repair advice.
+        """
         repayment_plan = "Repayment Plan: Focus on high-interest debts first."
         consolidation_advice = "Consider debt consolidation for multiple high-interest debts."
         return f"{repayment_plan}\n{consolidation_advice}"
 
-
 class FinancialAdvisor:
-    """
-    Advisor specialized in offering financial advisory services.
-    """
-    
-    def get_user_profile(self, user_id):
-        # Fetch user profile from a database or other data source
-        # Placeholder for fetching user profile
-        return {
-            "user_id": user_id,
-            "name": "John Doe",
-            "budget": True,  # Indicates if the user has a budget setup
-            "long_term_goals": ["retirement", "buying a home"]
-        }
-
-    def interact_with_user(self, user_id):
+    def interact_with_user(self, user_data):
         """
-        Simulate interaction with the user to obtain additional details.
+        Simulate interaction with the user to obtain financial details.
         Args:
-            user_id (str): The user's unique identifier.
+            user_data: Information about the user's finances.
         Returns:
-            tuple: A tuple containing interaction results and the user's profile.
+            A string summarizing the interaction results.
         """
-        user_profile = self.get_user_profile(user_id)
+        budget_query = "Yes, I have a monthly budget set up." if user_data["budget"] else "No, I haven't set up a budget yet."
+        savings_goals = "My long-term savings goal is to save for " + " and ".join(user_data["long_term_goals"]) + "."
+        return f"{budget_query}\n{savings_goals}"
 
-        # Implement logic to interact with the user based on the profile
-        # Example: Querying user preferences, financial goals, etc.
-
-        # For now, let's assume these are the results from our simulated interaction
-        interaction_results = {
-            "budget_query": "Yes, I have a monthly budget set up." if user_profile["budget"] else "No, I haven't set up a budget yet.",
-            "savings_goals": "My long-term savings goal is to save for " + " and ".join(user_profile["long_term_goals"]) + "."
-        }
-
-        return interaction_results, user_profile
-    
-    def advise(self, user_id, query):
-        # Here we simulate interaction and retrieval of additional info
-        interaction_results, user_profile = self.interact_with_user(user_id)
-        # Integrate financial models or algorithms based on user data and interaction results
-        # Pseudo-code:
-        # advice = financial_model.generate_advice(user_profile, interaction_results)
-        
-        advice = f"Financial advice based on user's query about {query}."
-        return advice
-
-
-
-
- #Function to interact with GPT-4 API
-    def call_openai_api(self, user_input):
+def advise(self, user_id, query):
         """
-        Calls the OpenAI API with the provided user input.
+        Provide financial advice based on the user's query.
+        Args:
+            user_id: The user's identifier.
+            query: The financial query from the user.
+        Returns:
+            A string containing financial advice.
+        """
+        # Logic for integrating financial models or algorithms based on user data
+        return f"Financial advice based on user's query about {query}."
 
+def call_openai_api(self, user_input):
+        """
+        Call the OpenAI API with the provided user input.
         Args:
             user_input (str): The input from the user.
-
         Returns:
-            str: The content of the response message or error message.
+            The response from the API.
         """
         messages = [{"role": "user", "content": user_input}]
         payload = {"model": "gpt-4-1106-preview", "messages": messages}
@@ -565,34 +399,24 @@ class FinancialAdvisor:
 
         try:
             response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-            response.raise_for_status()  # Raises an HTTPError for bad responses
+            response.raise_for_status()
             return response.json()['choices'][0]['message']['content']
-        except requests.exceptions.HTTPError as e:
-            logging.error(f"HTTPError in OpenAI API call: {e}, URL: {response.url}, Status Code: {response.status_code}")
-            return f"Error in API response: {response.status_code}, {response.text}"
-        except requests.exceptions.ConnectionError as e:
-            logging.error(f"ConnectionError in OpenAI API call: {e}, URL: {response.url}")
-            return "Error: Unable to connect to the OpenAI API."
-        except requests.exceptions.Timeout as e:
-            logging.error(f"TimeoutError in OpenAI API call: {e}, URL: {response.url}")
-            return "Error: Timeout while connecting to the OpenAI API."
         except requests.exceptions.RequestException as e:
-            logging.error(f"RequestException in OpenAI API call: {e}, URL: {response.url}")
-            return "Error: Problem with the request to the OpenAI API."
-        except Exception as e:
-            logging.error(f"Unexpected error in OpenAI API call: {str(e)}")
+            logging.error(f"Error in OpenAI API call: {str(e)}")
             return f"Unexpected error: {str(e)}"
 
-# Define the functions for query classification, fetching financial data and news, summarizing and validating data
-def classify_query(self, user_input):
+def classify_query(user_input):
+    """
+    Classify the user input into categories.
+    Args:
+        user_input (str): The input query from the user.
+    Returns:
+        A string representing the category of the query.
+    """
     financial_keywords = ["stock", "crypto", "market", "investment", "financial", "economy"]
     news_keywords = ["news", "headline", "current events", "article", "report"]
-
-    # Tokenize and remove stopwords
     tokens = word_tokenize(user_input.lower())
     filtered_tokens = [word for word in tokens if word not in stopwords.words('english')]
-
-    # Check for keyword presence
     if any(keyword in filtered_tokens for keyword in financial_keywords):
         return "finance"
     elif any(keyword in filtered_tokens for keyword in news_keywords):
@@ -601,10 +425,15 @@ def classify_query(self, user_input):
         return "general"
 
 def fetch_financial_data(query):
+    """
+    Fetch financial data based on the query.
+    Args:
+        query (str): The financial query.
+    Returns:
+        The fetched financial data or an error message.
+    """
     api_key = os.getenv('ALPHA_VANTAGE_API_KEY')
-    # Parse the query for more detailed input
-    parsed_query = parse_query(query)
-    url = f'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={parsed_query}&apikey={api_key}'
+    url = f'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={query}&apikey={api_key}'
     try:
         response = requests.get(url)
         if response.status_code == 200:
@@ -617,12 +446,17 @@ def fetch_financial_data(query):
         return f"Network error: {str(e)}"
     except Exception as e:
         return f"Unexpected error: {str(e)}"
-
-def fetch_news_articles(topic):
+    
+    def fetch_news_articles(topic):
+     """
+    Fetch news articles based on the topic.
+    Args:
+        topic (str): The news topic.
+    Returns:
+        The fetched news articles or an error message.
+    """
     api_key = os.getenv('ALPHA_VANTAGE_API_KEY')
-    # Parse the topic for more detailed input
-    parsed_topic = parse_topic(topic)
-    url = f'https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers={parsed_topic}&apikey={api_key}'
+    url = f'https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers={topic}&apikey={api_key}'
     try:
         response = requests.get(url)
         if response.status_code == 200:
@@ -635,22 +469,36 @@ def fetch_news_articles(topic):
         return f"Network error: {str(e)}"
     except Exception as e:
         return f"Unexpected error: {str(e)}"
-
+    
 def summarize_and_validate(data, user_input):
+    """
+    Summarize and validate the given data based on the user's input.
+    Args:
+        data: The data to be summarized.
+        user_input: The user's input for contextual relevance.
+    Returns:
+        The summary if valid and relevant, otherwise an error message.
+    """
     # Use Mistral model to summarize the data
     summary = mistral_llm(data)
     # Validate the summary using GPT-4
     validation = validate_with_gpt4(summary)
-    # Check for factual accuracy, coherence, and relevance in the validation
     if "accurate" in validation.lower() and "coherent" in validation.lower():
-        # Check relevance of the summary to the user's query
         if user_input.lower() in summary.lower():
             return summary
         else:
             return "The summary was not relevant to your query."
     else:
         return "The summary was not accurate or coherent."
+
 def validate_with_gpt4(summary):
+    """
+    Validate the given summary using GPT-4.
+    Args:
+        summary: The summary to be validated.
+    Returns:
+        Validation result as a string.
+    """
     try:
         response = openai.Completion.create(
             engine="gpt-4-1106-preview",
@@ -660,98 +508,64 @@ def validate_with_gpt4(summary):
         )
         review = response.choices[0].text.strip()
         logging.info(f"Summary review: {review}")
-        # Check for factual accuracy and coherence in the review
-        if "accurate" in review.lower() and "coherent" in review.lower():
-            return "The summary is accurate and coherent."
-        else:
-            return "The summary is not accurate or coherent."
+        return "accurate and coherent" if "accurate" in review.lower() and "coherent" in review.lower() else "not accurate or coherent"
     except Exception as e:
         logging.exception("Error calling GPT-4 API for summary validation")
         return "Unable to validate summary."
 
-
 def mistral_llm(query):
-    # Replace with your custom endpoint URL
+    """
+    Query the Mistral model.
+    Args:
+        query: The query to be sent to the model.
+    Returns:
+        The model's response or None if an error occurs.
+    """
     API_URL = "https://z983hozbx3in30io.us-east-1.aws.endpoints.huggingface.cloud"
-    # Authorization token
     auth_token = "Bearer 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"
-    # Prepare the request header
-    headers = {
-        "Authorization": auth_token,
-        "Content-Type": "application/json"
-    }
-    # Prepare the request body
+    headers = {"Authorization": auth_token, "Content-Type": "application/json"}
     data = json.dumps({"inputs": query})
-
     try:
-        # Send POST request to the API
         response = requests.post(API_URL, headers=headers, data=data)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            logging.error(f"API call failed: {response.status_code}, {response.text}")
-            return None
+        return response.json() if response.status_code == 200 else None
     except Exception as e:
         logging.exception("Exception occurred during API call")
         return None
 
-
 def visualized_data(dataset):
-    
-    if isinstance(dataset, dict):
-        # Bar chart
-        fig, ax = plt.subplots()
-        sns.barplot(x=list(dataset.keys()), y=list(dataset.values()), ax=ax)
-
-    elif isinstance(dataset, pd.DataFrame):
-
+    """
+    Visualize the provided dataset.
+    Args:
+        dataset: The dataset to visualize.
+    Returns:
+        The figure object or an error message.
+    """
+    try:
+        if isinstance(dataset, dict):
+            # Bar chart for dictionary data
             fig, ax = plt.subplots()
-            
+            sns.barplot(x=list(dataset.keys()), y=list(dataset.values()), ax=ax)
+        elif isinstance(dataset, pd.DataFrame):
+            # Time series or scatter plot for DataFrame
+            fig, ax = plt.subplots()
             if "Date" in dataset.columns:
-            
-                dataset.set_index("Date", inplace=True)  
+                dataset.set_index("Date", inplace=True)
                 sns.lineplot(data=dataset, ax=ax)
-                
-                ax.set(xlabel="Date", ylabel="Values")
                 ax.set_title("Time Series Plot")
-                
-            elif {"X_Axis", "Y_Axis"} <= set(dataset.columns):  
-
-                sns.scatterplot(data=dataset, x="X_Axis", y="Y_Axis", ax=ax)
-                
-                ax.set(xlabel="X_Axis", ylabel="Y_Axis") 
+            else:
+                sns.scatterplot(data=dataset, ax=ax)
                 ax.set_title("Scatter Plot")
-                
-        
-    elif isinstance(dataset, list) and len(dataset) == 2 and all(isinstance(i, list) for i in dataset): 
-        # Heatmap
-        fig, ax = plt.subplots()
-        sns.heatmap(dataset, ax=ax)
-        
-    elif isinstance(dataset, list) and isinstance(dataset[0], list):
-        # Clustermap
-        fig, ax = plt.subplots()
-        sns.clustermap(dataset, ax=ax)
-        
-    elif isinstance(dataset, list) and all(isinstance(i, tuple) and len(i) == 2 for i in dataset):
-        # Line graph
-        fig, ax = plt.subplots()
-        x = [i[0] for i in dataset]
-        y = [i[1] for i in dataset] 
-        sns.lineplot(x=x, y=y, ax=ax) 
-        
-    elif isinstance(dataset, list) and all(isinstance(i, tuple) and len(i) == 2 for i in dataset[0]):
-        # Scatter plot
-        fig, ax = plt.subplots()
-        x = [i[0] for i in dataset[0]]  
-        y = [i[1] for i in dataset[0]]
-        sns.scatterplot(x=x, y=y, ax=ax)
-        
-    else:
-        return "Unable to visualize data"
-
-    fig.savefig('plot.png')
-    return fig
+        elif isinstance(dataset, list):
+            # Heatmap or clustermap for list data
+            fig, ax = plt.subplots()
+            sns.heatmap(dataset, ax=ax) if len(dataset) == 2 else sns.clustermap(dataset)
+        else:
+            return "Unable to visualize data"
+        fig.savefig('plot.png')
+        return fig
+    except Exception as e:
+        logging.error("Error in data visualization: {}".format(str(e)))
+        return "Error in visualizing data"
 
 # Main execution
 if __name__ == "__main__":
@@ -767,8 +581,7 @@ if __name__ == "__main__":
     user = UserProxyAgent(
         name="user",
         human_input_mode="ALWAYS",
-        llm_config=False  # or your specific configuration
-        # Add other parameters as needed
+        llm_config=False  # Add specific configurations if required
     )
 
     # Setup Group Chat
@@ -778,20 +591,17 @@ if __name__ == "__main__":
     # Start a continuous interaction loop
     chat_history = []
     while True:
-        # Get user input
         user_input = input("You: ")
         chat_history.append({"role": "user", "content": user_input})
 
-        # Break the loop if the user types 'exit' or 'quit'
         if user_input.lower() in ['exit', 'quit']:
             break
 
-        # Chat with TeachableAgent
         response = teachable_agent.respond_to_user(user_input, chat_history)
         print(response)
         chat_history.append({"role": "assistant", "content": response})
 
-    # Update the database
+       # Update the database and close connections (if applicable)
     teachable_agent.learn_from_user_feedback()
     teachable_agent.close_db()
 
