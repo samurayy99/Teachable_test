@@ -4,7 +4,7 @@ import json
 
 def test_openai_api():
     api_key = os.getenv('OPENAI_API_KEY')  # Ensure this is set in your environment
-    headers = {"Authorization": f"Bearer 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"}
+    headers = {"Authorization": f"Bearer {api_key}"}
     payload = {
         "model": "gpt-4-1106-preview",
         "messages": [

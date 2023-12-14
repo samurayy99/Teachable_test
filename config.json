@@ -1,8 +1,4 @@
 {
-    
-    "openai": {
-        "api_key": "YOUR_OPENAI_API_KEY"
-    },
     "llm_config": {
         "timeout": 600,
         "cache_seed": 42,
@@ -16,14 +12,6 @@
             "gpt-3.5-turbo": {
                 "api_type": "openai",
                 "top_p": 0.9
-            },
-            "mistral": {
-                "api_type": "huggingface",
-                "model_name": "Mistral-7B-v0.1"
-            },
-            "llama2": {
-                "api_type": "huggingface",
-                "model_name": "Llama-2-7b-chat-hf"
             }
         }
     },
@@ -55,14 +43,11 @@
             "sentiment_analysis": {
                 "enabled": true,
                 "sensitivity": 0.8
-            },
-            "language_translation": {
-                "enabled": false
             }
         },
         "feedback": {
             "collect_user_feedback": true,
             "feedback_evaluation_period": "30d"
         }
-
-}}
+    }
+}

@@ -25,7 +25,7 @@ import autogen
 from autogen import config_list_from_json
 from autogen.agentchat.contrib.gpt_assistant_agent import GPTAssistantAgent
 from autogen import UserProxyAgent
-from tenacity import retry, stop_after_attempt, wait_exponential
+# from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Download NLTK data
 nltk.download('punkt')
@@ -359,44 +359,24 @@ class TeachableAgentWithLLMSelection:
         logging.info("Database connections closed.")
 
     def call_openai_api(self, user_input):
-        # Implement rate limiting and retry logic to handle API limits
-        # This is a placeholder for the rate limiting and retry mechanism
-        # In a real-world scenario, this could involve a library like tenacity or retrying
-
-        # Add detailed error handling for different HTTP status codes
-        # This is a placeholder for the error handling mechanism
-        # In a real-world scenario, this could involve a try/except block with different handlers for each status code
-
-        # Ensure secure handling of API keys, possibly using environment variables or a secrets manager
-        # This is a placeholder for the secure handling of API keys
-        # In a real-world scenario, this could involve a secrets manager like AWS Secrets Manager or HashiCorp Vault
-
+    try:
         messages = [{"role": "user", "content": user_input}]
-      #  payload = {"model": "gpt-4-1106-preview", "messages": messages}
-      #  headers = {"Authorization": f"Bearer {self.api_key}"}
+        payload = {"model": "gpt-4-1106-preview", "messages": messages}
+        headers = {"Authorization": f"Bearer {self.api_key}"}
 
-      #  try:
-      #      @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=60))
-      #      def call_openai_api(self, user_input):
-      #          messages = [{"role": "user", "content": user_input}]
-      #          payload = {"model": "gpt-4-1106-preview", "messages": messages}
-      #          headers = {"Authorization": f"Bearer {self.api_key}"}
+        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+        if response.status_code == 200:
+            return response.json()['choices'][0]['message']['content']
+        elif response.status_code == 429:
+            time.sleep(60)  # Wait for 60 seconds before retrying
+            return self.call_openai_api(user_input)  # Recursive call after waiting
+        else:
+            raise APIError(f"Error in API response: {response.status_code}, {response.text}")
+    except Exception as e:
+        logging.error(f"Unexpected error: {str(e)}", exc_info=True)
+        return f"Unexpected error: {str(e)}"
 
-      #          response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-      #          if response.status_code == 200:
-      #              return response.json()['choices'][0]['message']['content']
-      #          elif response.status_code == 429:
-      #              raise RateLimitExceededError("Rate limit exceeded")
-      #          else:
-      #              raise APIError(f"Error in API response: {response.status_code}, {response.text}")
-      #      return exponential_backoff_retry(api_call)
-      #  except RateLimitExceededError as e:
-      #      return f"Rate limit exceeded: {str(e)}"
-      #  except APIError as e:
-      #      return str(e)
-      #  except Exception as e:
-      #      logging.error(f"Unexpected error: {str(e)}", exc_info=True)
-      #      return f"Unexpected error: {str(e)}"
+
     
     def process_feedback(self, feedback):
         # Example processing logic: Validate and parse the feedback
