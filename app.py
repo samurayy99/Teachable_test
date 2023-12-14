@@ -40,22 +40,20 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Load configurations from environment and JSON
 def load_configurations():
-    """
-    Load configurations from environment and JSON.
-    Returns:
-        dict: The configuration dictionary.
+    """ 
+    Load configurations from environment and JSON. 
+    Returns: 
+    dict: The configuration dictionary. 
     """
     load_dotenv()
     with open('config.json') as config_file:
         config = json.load(config_file)
-
     config['openai'] = {
         'api_key': os.getenv('OPENAI_API_KEY', config.get('api_key'))  # Securely fetch API key
     }
     config['test_mode'] = os.getenv('TEST_MODE', 'False').lower() == 'true'
     config['llm_config'] = config.get('llm_config', {})
     config['teach_config'] = config.get('teach_config', {})
-
     return config
 
 config = load_configurations()
@@ -358,7 +356,8 @@ class TeachableAgentWithLLMSelection:
             self.database_engine.dispose()
         logging.info("Database connections closed.")
 
-    def call_openai_api(self, user_input):
+    
+def call_openai_api(self, user_input):
     try:
         messages = [{"role": "user", "content": user_input}]
         payload = {"model": "gpt-4-1106-preview", "messages": messages}
@@ -375,6 +374,7 @@ class TeachableAgentWithLLMSelection:
     except Exception as e:
         logging.error(f"Unexpected error: {str(e)}", exc_info=True)
         return f"Unexpected error: {str(e)}"
+
 
 
     
