@@ -27,6 +27,7 @@ from autogen.agentchat.contrib.gpt_assistant_agent import GPTAssistantAgent
 from autogen import UserProxyAgent
 # from tenacity import retry, stop_after_attempt, wait_exponential
 
+
 # Download NLTK data
 nltk.download('punkt')
 nltk.download('stopwords')
@@ -92,23 +93,22 @@ class GroupManager:
         except Exception as e:
             self.logger.error(f"Error loading advisor configuration: {e}")
 
-    # def initialize_advisors(self):
-    #     """
+     def initialize_advisors(self):
+         """
     #     Initialize advisors with default types.
     #     """
-    #     advisors = {
-    #         "finance": {
-    #             "investing": AdvisorFactory.create_advisor("InvestingAdvisor"),
-    #             "trading": AdvisorFactory.create_advisor("TradingAdvisor"),
-    #             "budget": AdvisorFactory.create_advisor("BudgetAdvisor"),
-    #             "debt": AdvisorFactory.create_advisor("DebtAdvisor"),  
-    #             "crypto": AdvisorFactory.create_advisor("CryptoAdvisor"),
-    #             "financial_plan": AdvisorFactory.create_advisor("FinancialPlanner") 
-    #         }
-    #         # Add other specialized agents here...
-    #     }
-    #     self.logger.info("Initialized advisors: %s", advisors.keys())
-    #     return advisors
+         advisors = {
+             "finance": {
+                 "investing": AdvisorFactory.create_advisor("InvestingAdvisor"),
+                 "trading": AdvisorFactory.create_advisor("TradingAdvisor"),
+                 "debt": AdvisorFactory.create_advisor("DebtAdvisor"),  
+                 "crypto": AdvisorFactory.create_advisor("CryptoAdvisor"),
+                 "financial_plan": AdvisorFactory.create_advisor("FinancialPlanner") 
+             }
+             # Add other specialized agents here...
+         }
+         self.logger.info("Initialized advisors: %s", advisors.keys())
+         return advisors
 
     def add_advisor(self, category, keyword, advisor_type):
         """
@@ -256,9 +256,6 @@ class AdvisorFactory:
             
         elif advisor_type == "TradingAdvisor":
             advisor = TradingAdvisor()
-        
-        elif advisor_type == "BudgetAdvisor":
-            advisor = BudgetAdvisor()
             
         elif advisor_type == "DefaultFinanceAdvisor":
             advisor = DefaultFinanceAdvisor()
