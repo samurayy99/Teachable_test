@@ -367,13 +367,14 @@ def call_openai_api(self, user_input):
         if response.status_code == 200:
             return response.json()['choices'][0]['message']['content']
         elif response.status_code == 429:
-            time.sleep(60)  # Wait for 60 seconds before retrying
-            return self.call_openai_api(user_input)  # Recursive call after waiting
+            logging.error("API rate limit exceeded. Please try again later.")
+            return "API rate limit exceeded. Please try again later."
         else:
             raise APIError(f"Error in API response: {response.status_code}, {response.text}")
     except Exception as e:
         logging.error(f"Unexpected error: {str(e)}", exc_info=True)
         return f"Unexpected error: {str(e)}"
+
 
 
 
@@ -432,57 +433,9 @@ def call_openai_api(self, user_input):
             logging.error(f"Error loading data for training: {e}")
             return pd.DataFrame()
 
-
-class RateLimitExceededError(Exception):
-    pass
 class APIError(Exception):
     pass
 
-def exponential_backoff_retry(func, max_retries=5, max_delay=60, exceptions_to_check=(Exception,), 
-                              growth_factor=2, jitter=True, on_retry=None):
-    """
-    Implements an exponential backoff retry strategy.
-    Args:
-        func (callable): The function to retry.
-        max_retries (int): The maximum number of retries. Default is 5.
-        max_delay (int): The maximum delay between retries in seconds. Default is 60.
-        exceptions_to_check (tuple): Exceptions that trigger a retry. Default is (Exception,).
-        growth_factor (float): The exponential growth factor. Default is 2.
-        jitter (bool): Whether to add random jitter to the wait time.
-        on_retry (callable): Optional callback function to execute after each retry.
-    Returns:
-        The result of the function call.
-    Raises:
-        Exception: If maximum retries are exceeded.
-    """
-    logger = logging.getLogger(__name__)
-    last_exception = None
-
-    for attempt in range(1, max_retries + 1):
-        try:
-            return func()
-        except exceptions_to_check as e:
-            last_exception = e
-            sleep_time = min(growth_factor ** (attempt - 1), max_delay)
-            if jitter:
-                sleep_time += random.uniform(0, 1)
-            logger.warning(f"Retry {attempt}/{max_retries} after exception: {e}. Waiting {sleep_time} seconds.")
-            time.sleep(sleep_time)
-            if on_retry:
-                on_retry(attempt, e)
-
-    logger.error(f"Maximum retries exceeded. Last exception: {last_exception}")
-    raise last_exception or Exception("Maximum retries exceeded")
-
-# Example usage
-def my_function():
-    # Replace with a function that might fail
-    raise RateLimitExceededError("Rate limit exceeded")
-
-try:
-    result = exponential_backoff_retry(my_function, exceptions_to_check=(RateLimitExceededError,))
-except Exception as e:
-    print(f"Operation failed: {e}")
 class CryptoAdvisor:
     ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY')
 
@@ -519,6 +472,7 @@ class CryptoAdvisor:
         except Exception as e:
             logging.error(f"Unexpected error in API call: {str(e)}, URL: {url}")
         return None
+
 
     def advise_on_crypto(self, query):
         crypto_name = query.split()[0]  # simplistic extraction

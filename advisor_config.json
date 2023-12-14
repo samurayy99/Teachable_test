@@ -1,7 +1,7 @@
 {
     "finance": {
         "investing": "InvestingAdvisor",
-        "trading": "TradingAdvisor",
-        "budget": "BudgetAdvisor"
+        "trading": "TradingAdvisor"
+    
     }
 }
