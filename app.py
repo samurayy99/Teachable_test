@@ -19,8 +19,79 @@ from nltk.corpus import stopwords  # Added specific import for stopwords
 import openai  # Added import for openai
 import autogen  # Added import for autogen
 
-# Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Additional imports for advanced functionalities
+from transformers import BertTokenizer, TFBertForSequenceClassification
+import tensorflow as tf
+import numpy as np
+
+import os
+from autogen.agentchat import Agent
+from autogen.agentchat.assistant_agent import ConversableAgent
+from autogen.agentchat.text_analyzer_agent import TextAnalyzerAgent
+from chromadb import chromadb
+
+
+class TeachableAgent(ConversableAgent):
+  """(Experimental) TeachableAgent remembers user teachings in a vector database."""
+
+  def __init__(
+    self,
+    name="teachableagent",
+    system_message="You are a helpful AI assistant that remembers user teachings from prior chats.",
+    human_input_mode="NEVER",
+    llm_config: Optional[Union[Dict, bool]] = None,
+    analyzer_llm_config: Optional[Union[Dict, bool]] = None,
+    teach_config: Optional[Dict] = None,
+  **kwargs,
+  ):
+    """
+    Args:
+      - name (str): name of the agent.
+      - system_message (str): system message for the ChatCompletion inference.
+      - human_input_mode (str): This agent should NEVER prompt the human for input.
+      - llm_config (dict or False): llm inference configuration.
+      - analyzer_llm_config (dict or False): llm inference configuration passed to TextAnalyzerAgent.
+      - teach_config (dict or None): Additional parameters used by TeachableAgent.
+      **kwargs (dict): other kwargs in ConversableAgent.
+    """
+    super().__init__(
+      name=name,
+      system_message=system_message,
+      human_input_mode=human_input_mode,
+      llm_config=llm_config,
+      analyzer_llm_config=analyzer_llm_config,
+      **kwargs,
+    )
+
+    # Register a custom reply function.
+    self.register_reply(Agent, self._generate_teachable_assistant_reply, position=2)
+
+   # Assemble the parameter settings.
+    self._teach_config = {} if teach_config is None else teach_config
+    self.verbosity = self._teach_config.get("verbosity", 0)
+    self.reset_db = self._teach_config.get("reset_db", False)
+    self.path_to_db_dir = self._teach_config.get("path_to_db_dir", "./tmp/teachable_agent_db")
+
+   # Create the analyzer.
+   if analyzer_llm_config is None:
+     analyzer_llm_config = self.llm_config
+   self.analyzer = TextAnalyzerAgent(llm_config=analyzer_llm_config)
+
+   # Create the memo store.
+   self.memo_store = MemoStore(verbosity=self.verbosity, reset=self.reset_db, path_to_db_dir=self.path_to_db_dir)
+
+  def learn_from_user_feedback(self):
+    """Reviews the user comments from the last chat, and decides what teachings to store as memos."""
+    print(colored("\nREVIEWING CHAT FOR USER TEACHINGS TO REMEMBER", "light_yellow"))
+    self.user_comments = []
+
+  def consider_memo_storage(self, comment):
+    """Decides whether to store something from one user comment in the DB."""
+    # Check for a problem-solution pair.
+    response = self.analyze(
+      comment,
+      "Does any part of the TEXT ask the agent to perform a task or solve a problem? Answer with just one word, yes or
+
 
 # Load configurations from environment and JSON
 def load_configurations():
@@ -42,180 +113,58 @@ def load_configurations():
 
 config = load_configurations()
 
+class FinancialAIAdvisor:
+    def __init__(self, api_key):
+        self.api_key = api_key
+        self.sentiment_analyzer = self._initialize_sentiment_analyzer()
+
+    def _initialize_sentiment_analyzer(self):
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        model = TFBertForSequenceClassification.from_pretrained('bert-base-uncased')
+        return tokenizer, model
+
+    def analyze_market_sentiment(self, text):
+        tokenizer, model = self.sentiment_analyzer
+        inputs = tokenizer(text, return_tensors="tf")
+        outputs = model(inputs)
+        prediction = tf.nn.softmax(outputs.logits, axis=-1)
+        return prediction.numpy()
+
+    def get_stock_data(self, symbol):
+        url = f"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={symbol}&interval=5min&apikey={self.api_key}"
+        response = requests.get(url)
+        data = response.json()
+        return data
+
+    def compute_var(self, financial_data, confidence_level=0.95):
+        portfolio_values = np.array([data['close'] for data in financial_data])  # Simplified example
+        var = np.percentile(portfolio_values, (1 - confidence_level) * 100)
+        return var
+
+    # Additional methods for financial analysis
+
 class GroupManager:
-    """
-    Manages a group of specialized agents.
-    """
-    def __init__(self):
-        """
-        Initialize the GroupManager with a set of specialized agents.
-        """
-        self.logger = logging.getLogger(__name__)
-        self.advisors = {}
-        self.load_advisor_config()
+    def __init__(self, api_key):
+        self.financial_advisor = FinancialAIAdvisor(api_key)
 
-    def load_advisor_config(self):
-        """
-        Load advisor configurations and initialize advisors.
-        """
-        try:
-            with open('advisor_config.json', 'r') as file:
-                config = json.load(file)
-
-            for category, advisor_types in config.items():
-                self.advisors[category] = {}
-                for keyword, advisor_type in advisor_types.items():
-                    self.advisors[category][keyword] = AdvisorFactory.create_advisor(advisor_type)
-
-            self.logger.info("Advisors initialized from configuration.")
-        except Exception as e:
-            self.logger.error(f"Error loading advisor configuration: {e}")
-
-    def add_advisor(self, category, keyword, advisor_type):
-        """
-        Add a new advisor to a specific category.
-        """
-        try:
-            advisor = AdvisorFactory.create_advisor(advisor_type)
-            if category not in self.advisors:
-                self.advisors[category] = {}
-            self.advisors[category][keyword] = advisor
-            self.logger.info("Added advisor: %s under category %s", keyword, category)
-        except ValueError as e:
-            self.logger.error("Error adding advisor: %s", e)
-
-    def remove_advisor(self, category, keyword):
-        """
-        Remove an advisor from a specific category.
-        """
-        if category in self.advisors and keyword in self.advisors[category]:
-            del self.advisors[category][keyword]
-            self.logger.info("Removed advisor: %s from category %s", keyword, category)
-        else:
-            self.logger.warning("Advisor or category not found: %s in %s", keyword, category)
-
-    def get_advisor(self, category, keyword):
-        """
-        Get an advisor from a specific category.
-        """
-        if category in self.advisors and keyword in self.advisors[category]:
-            return self.advisors[category][keyword]
-        else:
-            self.logger.warning("Advisor or category not found: %s in %s", keyword, category)
-            return None
-
-# Define functions for handling queries and logging
-class QueryHandler:
     def handle_query(self, user_input):
-        """
-        Process the user query and obtain a response.
-        Args:
-            user_input: The input query from the user.
-        Returns:
-            A string response for the user.
-        """
-        # Process the query and obtain a response
-        response = self.process_user_input(user_input)  # Replace with the appropriate method
-        return response
-
-    def handle_fallback_query(self, user_input):
-        """
-        Handle queries that do not match any specific financial category.
-        Args:
-            user_input: The input query from the user.
-        Returns:
-            A string response for the user.
-        """
-        if self.is_finance_related(user_input):
-            response = "I'm here to help with your financial queries. Could you please provide more details?"
+        # Example of handling different types of queries
+        if 'stock' in user_input.lower():
+            return self.financial_advisor.get_stock_data(user_input.split()[-1])
+        elif 'sentiment' in user_input.lower():
+            return self.financial_advisor.analyze_market_sentiment(user_input)
         else:
-            response = "While I specialize in finance, I'm here to help in any way I can. For non-finance related queries, I might have limited advice."
-        return response
-
-    def is_finance_related(self, user_input):
-        """
-        Determine if the query is related to finance.
-        Args:
-            user_input: The input query from the user.
-        Returns:
-            bool: True if the query is finance-related, False otherwise.
-        """
-        return 'finance' in user_input.lower()  # Simplified example
-
-    def log_unresponsive_interaction(self, user_input, response):
-        """
-        Log interactions where the agent couldn't provide a relevant response.
-        Args:
-            user_input: The user input query.
-            response: The response provided by the agent.
-        """
-        logging.warning(f"Unresponsive interaction logged: User input: {user_input}, Response: {response}")
-
-    # Dummy method to represent query processing, replace with your actual method
-    def process_user_input(self, user_input):
-        return "Processed response for: " + user_input
-
-# AdvisorFactory for creating instances of specialized advisors
-class AdvisorFactory:
-    """
-    Factory class for creating instances of specialized advisors.
-    """
-    advisor_cache = {}
-
-    @staticmethod
-    def create_advisor(advisor_type):
-        """
-        Create and cache advisor instances based on their type.
-        Args:
-            advisor_type: The type of advisor to create.
-        Returns:
-            An instance of the requested advisor type.
-        """
-        if advisor_type in AdvisorFactory.advisor_cache:
-            return AdvisorFactory.advisor_cache[advisor_type]
-        
-        if advisor_type == "FinancialAdvisor":
-            advisor = FinancialAdvisor()
-        elif advisor_type == "CryptoAdvisor":
-            advisor = CryptoAdvisor()
-        elif advisor_type == "FinancialPlanner":
-            advisor = FinancialPlanner()
-        elif advisor_type == "DebtRepairAdvisor":
-            advisor = DebtRepairAdvisor()
-        else:
-            raise ValueError("Invalid advisor type")
-
-        AdvisorFactory.advisor_cache[advisor_type] = advisor
-        return advisor
-
-# Advisor classes providing specialized advice
-class FinancialAdvisor:
-    def advise(self, query):
-        return f"Financial advice for query: {query}"
-
-class CryptoAdvisor:
-    def advise(self, query):
-        return f"Crypto advice for query: {query}"
-
-class FinancialPlanner:
-    def advise(self, query):
-        return f"Financial planning for query: {query}"
-
-class DebtRepairAdvisor:
-    def advise(self, query):
-        return f"Debt repair advice for query: {query}"
+            return "General financial advice"
 
 class TeachableAgentWithLLMSelection:
     def __init__(self, name, llm_config, teach_config, group_manager):
         self.name = name
         self.llm_config = llm_config
         self.teach_config = teach_config
-        self.config = load_configurations()
         self.group_manager = group_manager
-        self.api_key = self.config['openai']['api_key']
 
-    def load_feedback_dataset(self):
-        # Logic to load feedback data, if relevant to your use case
+    def respond_to_query(self, user_input):
+        return self.group_manager.handle_query(user_input)
         pass
 
     def update_knowledge_base(self, feedback_dataset):
@@ -569,13 +518,22 @@ def visualized_data(dataset):
 
 # Main execution
 if __name__ == "__main__":
-    group_manager = GroupManager()
+    api_key = "your_alpha_vantage_api_key"  # Replace with your actual API key
+    group_manager = GroupManager(api_key)
     teachable_agent = TeachableAgentWithLLMSelection(
         name="financial_teachable_agent",
-        llm_config=config['llm_config'],
-        teach_config=config['teach_config'],
+        llm_config={},  # Add actual configuration
+        teach_config={},  # Add actual configuration
         group_manager=group_manager
     )
+
+    while True:
+        user_input = input("You: ")
+        if user_input.lower() in ['exit', 'quit']:
+            break
+
+        response = teachable_agent.respond_to_query(user_input)
+        print("Assistant:", response)
     
     # Create UserProxyAgent
     user = UserProxyAgent(

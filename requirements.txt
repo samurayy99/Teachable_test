@@ -8,3 +8,5 @@ sqlalchemy
 tenacity
 nltk
 scikit-learn
+transformers
+tensorflow
