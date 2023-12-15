@@ -3,3 +3,7 @@ env/
 tmp/
 .env
 .aider
+OAI_CONFIG_LIST
+teachable_agent_session.log
+tmp/
+requirements.txt

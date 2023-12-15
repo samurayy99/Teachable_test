@@ -10,3 +10,4 @@ nltk
 scikit-learn
 transformers
 tensorflow
+spacy
