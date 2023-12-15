@@ -1,0 +1,70 @@
+USER:
+Main Execution
+Develop a continuous interaction loop:
+Use a while loop to keep the chat session open.
+Break from the loop upon a user command or after a certain condition is met.
+
+ASSISTANT: To implement a continuous interaction loop, we need to modify the `app.py` file.
+
+Here are the steps:
+
+1. Add a while loop in the main execution section.
+2. Break the loop when the user types 'exit' or 'quit'.
+
+Here is the *SEARCH/REPLACE* block:
+
+app.py
+```python
+<<<<<<< SEARCH
+# Main execution
+if __name__ == "__main__":
+    group_manager = GroupManager()
+    teachable_agent = TeachableAgentWithLLMSelection(
+        name="financial_teachable_agent",
+        llm_config=config['llm_config'],
+        teach_config=config['teach_config'],
+        group_manager=group_manager
+    )
+
+# Create UserProxyAgent
+user = UserProxyAgent("user", human_input_mode="ALWAYS")
+
+# Chat with TeachableAgent
+teachable_agent.initiate_chat(user, message="Hi, I'm a teachable user assistant! What's on your mind?")
+
+# Update the database
+teachable_agent.learn_from_user_feedback()
+teachable_agent.close_db()
+=======
+# Main execution
+if __name__ == "__main__":
+    group_manager = GroupManager()
+    teachable_agent = TeachableAgentWithLLMSelection(
+        name="financial_teachable_agent",
+        llm_config=config['llm_config'],
+        teach_config=config['teach_config'],
+        group_manager=group_manager
+    )
+
+    # Create UserProxyAgent
+    user = UserProxyAgent("user", human_input_mode="ALWAYS")
+
+    # Start a continuous interaction loop
+    while True:
+        # Chat with TeachableAgent
+        response = teachable_agent.initiate_chat(user, message="Hi, I'm a teachable user assistant! What's on your mind?")
+        print(response)
+
+        # Get user input
+        user_input = input("You: ")
+
+        # Break the loop if the user types 'exit' or 'quit'
+        if user_input.lower() in ['exit', 'quit']:
+            break
+
+    # Update the database
+    teachable_agent.learn_from_user_feedback()
+    teachable_agent.close_db()
+>>>>>>> REPLACE
+```
+This will keep the chat session open until the user types 'exit' or 'quit'.

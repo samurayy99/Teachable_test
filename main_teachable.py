@@ -86,88 +86,6 @@ class TeachableAgent(ConversableAgent):
 
 
 class MemoStore:
-    def __init__(self, verbosity, reset, path_to_db_dir):
-        self.verbosity = verbosity
-        self.reset = reset
-        self.path_to_db_dir = path_to_db_dir
-        self.path_to_dict = os.path.join(path_to_db_dir, "uid_text_dict.pkl")
-
-        # Initialize the database client and the vector database
-        settings = Settings(anonymized_telemetry=False, allow_reset=True, is_persistent=True, persist_directory=path_to_db_dir)
-        self.db_client = chromadb.Client(settings)
-        self.vec_db = self.db_client.create_collection("memos", get_or_create=True)
-
-        # Handle database reset if required
-        if reset:
-            self.reset_db()
-
-        # Load existing data from disk if not resetting
-        self.uid_text_dict = self._load_data_from_disk() if os.path.exists(self.path_to_dict) and not reset else {}
-        self.last_memo_id = len(self.uid_text_dict)
-
-    def _load_data_from_disk(self):
-        """Load memo data from disk."""
-        with open(self.path_to_dict, "rb") as f:
-            return pickle.load(f)
-
-    def add_input_output_pair(self, input_text, output_text):
-        """Add a new input-output pair to the database."""
-        self.last_memo_id += 1
-        self.vec_db.add([input_text], [str(self.last_memo_id)])
-        self.uid_text_dict[str(self.last_memo_id)] = (input_text, output_text)
-        self._save_data_to_disk()
-
-    def get_related_memos(self, query_text, n_results, threshold):
-        """Retrieve related memos based on a query text."""
-        results = self.vec_db.query([query_text], n_results)
-        return [(self.uid_text_dict[str(uid)], distance) for uid, _, distance in results if distance < threshold]
-
-    def reset_db(self):
-        """Reset the memo database."""
-        self.db_client.delete_collection("memos")
-        self.vec_db = self.db_client.create_collection("memos", get_or_create=True)
-        self.uid_text_dict = {}
-        self._save_data_to_disk()
-
-    def _save_data_to_disk(self):
-        """Save memo data to disk."""
-        with open(self.path_to_dict, "wb") as file:
-            pickle.dump(self.uid_text_dict, file)
-
-    def list_memos(self):
-        """Prints all stored memos for debugging purposes."""
-        if self.verbosity >= 1:
-            print("Stored Memos:")
-            for uid, (input_text, output_text) in self.uid_text_dict.items():
-                print(f"ID: {uid}\nInput: {input_text}\nOutput: {output_text}\n")
-
-def check_agent_response(teachable_agent, user, correct_answer, assert_on_error=False):
-    """
-    Checks whether the agent's response contains the correct answer.
-    :param assert_on_error: Set to True to raise an assertion error if the check fails.
-    """
-    agent_response = user.last_message(teachable_agent)["content"]
-    if correct_answer not in agent_response:
-        print(colored(f"\nTEST FAILED: EXPECTED ANSWER {correct_answer} NOT FOUND IN AGENT RESPONSE", "light_red"))
-        if assert_on_error:
-            assert correct_answer in agent_response
-        return 1
-    else:
-        print(colored(f"\nTEST PASSED: EXPECTED ANSWER {correct_answer} FOUND IN AGENT RESPONSE", "light_cyan"))
-        return 0
-
-def use_question_answer_phrasing():
-    teachable_agent = create_teachable_agent(reset_db=True)
-    user = ConversableAgent("user", max_consecutive_auto_reply=0, llm_config=False, human_input_mode="NEVER")
-    user.initiate_chat(teachable_agent, "What is the capital of France?")
-    user.send(teachable_agent, "The capital of France is Paris.")
-    errors = check_agent_response(teachable_agent, user, "Paris")
-    teachable_agent.learn_from_user_feedback()
-    teachable_agent.close_db()
-    return errors
-
-class MemoStore:
-    
 
     def __init__(self, verbosity, reset, path_to_db_dir):
         """
@@ -284,15 +202,92 @@ class MemoStore:
                     )
                 memos.append((input_text, output_text, distance))
         return memos
+    def __init__(self, verbosity, reset, path_to_db_dir):
+        self.verbosity = verbosity
+        self.reset = reset
+        self.path_to_db_dir = path_to_db_dir
+        self.path_to_dict = os.path.join(path_to_db_dir, "uid_text_dict.pkl")
+
+        # Initialize the database client and the vector database
+        settings = Settings(anonymized_telemetry=False, allow_reset=True, is_persistent=True, persist_directory=path_to_db_dir)
+        self.db_client = chromadb.Client(settings)
+        self.vec_db = self.db_client.create_collection("memos", get_or_create=True)
+
+        # Handle database reset if required
+        if reset:
+            self.reset_db()
+
+        # Load existing data from disk if not resetting
+        self.uid_text_dict = self._load_data_from_disk() if os.path.exists(self.path_to_dict) and not reset else {}
+        self.last_memo_id = len(self.uid_text_dict)
+
+    def _load_data_from_disk(self):
+        """Load memo data from disk."""
+        with open(self.path_to_dict, "rb") as f:
+            return pickle.load(f)
+
+    def add_input_output_pair(self, input_text, output_text):
+        """Add a new input-output pair to the database."""
+        self.last_memo_id += 1
+        self.vec_db.add([input_text], [str(self.last_memo_id)])
+        self.uid_text_dict[str(self.last_memo_id)] = (input_text, output_text)
+        self._save_data_to_disk()
+
+    def get_related_memos(self, query_text, n_results, threshold):
+        """Retrieve related memos based on a query text."""
+        results = self.vec_db.query([query_text], n_results)
+        return [(self.uid_text_dict[str(uid)], distance) for uid, _, distance in results if distance < threshold]
+
+    def reset_db(self):
+        """Reset the memo database."""
+        self.db_client.delete_collection("memos")
+        self.vec_db = self.db_client.create_collection("memos", get_or_create=True)
+        self.uid_text_dict = {}
+        self._save_data_to_disk()
+
+    def _save_data_to_disk(self):
+        """Save memo data to disk."""
+        with open(self.path_to_dict, "wb") as file:
+            pickle.dump(self.uid_text_dict, file)
+
+    def list_memos(self):
+        """Prints all stored memos for debugging purposes."""
+        if self.verbosity >= 1:
+            print("Stored Memos:")
+            for uid, (input_text, output_text) in self.uid_text_dict.items():
+                print(f"ID: {uid}\nInput: {input_text}\nOutput: {output_text}\n")
+
+def check_agent_response(teachable_agent, user, correct_answer, assert_on_error=False):
+    """
+    Checks whether the agent's response contains the correct answer.
+    :param assert_on_error: Set to True to raise an assertion error if the check fails.
+    """
+    agent_response = user.last_message(teachable_agent)["content"]
+    if correct_answer not in agent_response:
+        print(colored(f"\nTEST FAILED: EXPECTED ANSWER {correct_answer} NOT FOUND IN AGENT RESPONSE", "light_red"))
+        if assert_on_error:
+            assert correct_answer in agent_response
+        return 1
+    else:
+        print(colored(f"\nTEST PASSED: EXPECTED ANSWER {correct_answer} FOUND IN AGENT RESPONSE", "light_cyan"))
+        return 0
+
+def use_question_answer_phrasing():
+    teachable_agent = create_teachable_agent(reset_db=True)
+    user = ConversableAgent("user", max_consecutive_auto_reply=0, llm_config=False, human_input_mode="NEVER")
+    user.initiate_chat(teachable_agent, "What is the capital of France?")
+    user.send(teachable_agent, "The capital of France is Paris.")
+    errors = check_agent_response(teachable_agent, user, "Paris")
+    teachable_agent.learn_from_user_feedback()
+    teachable_agent.close_db()
+    return errors
+
+
 
 def create_teachable_agent(reset_db=False, verbosity=0):
-    """
-    Instantiates a TeachableAgent with the provided settings.
-    """
-    # Load LLM configurations from the JSON file
     config_list = config_list_from_json(env_or_file="/Users/lenox27/AI/TraderBuddy/OAI_CONFIG_LIST")
     llm_config = {"config_list": config_list, "timeout": 120}
-    analyzer_llm_config = llm_config  # For now, use the same config for the analyzer
+    analyzer_llm_config = llm_config
 
     teachable_agent = TeachableAgent(
         llm_config=llm_config,
@@ -321,7 +316,6 @@ def initiate_interactive_session(teachable_agent):
             continue
 
         try:
-            # Ensure the original case of user input is preserved for the agent
             messages = [{"role": "user", "content": user_input}]
             _, response = teachable_agent._generate_teachable_assistant_reply(messages)
             print("Agent:", response)
@@ -329,19 +323,25 @@ def initiate_interactive_session(teachable_agent):
             logging.error(f"Session error: {e}, Input: {user_input}")
             print(f"Error: {e}")
 
-
 def main():
+    teachable_agent = None
     try:
         teachable_agent = create_teachable_agent()
         initiate_interactive_session(teachable_agent)
+    except Exception as e:
+        logging.error(f"Main error: {e}")
+        print(f"Error: {e}")
     finally:
-        if 'teachable_agent' in locals():
-            if hasattr(teachable_agent, 'learn_from_user_feedback'):
-                teachable_agent.learn_from_user_feedback()
-            if hasattr(teachable_agent, 'close_db'):
-                teachable_agent.close_db()
-                print("Database closed.")
+        if teachable_agent and hasattr(teachable_agent, 'memo_store'):
+            teachable_agent.memo_store.close()
+            print("MemoStore data saved and database closed.")
+        if teachable_agent and hasattr(teachable_agent, 'learn_from_user_feedback'):
+            teachable_agent.learn_from_user_feedback()
+        if teachable_agent and hasattr(teachable_agent, 'close_db'):
+            teachable_agent.close_db()
+            print("Database closed.")
 
 if __name__ == "__main__":
     main()
+
 
