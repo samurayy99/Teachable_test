@@ -1,9 +1,31 @@
+# Ignore Python virtual environment folders
 env/
+
+# Ignore temporary build artifacts
 .cache/
 tmp/
+
+# Ignore environment-specific configuration files
 .env
+
+# Ignore AI model-related files
 .aider
 OAI_CONFIG_LIST
+
+# Ignore log files
 teachable_agent_session.log
+
+# Ignore compiled Python files
+*.pyc
+
+# Ignore IDE-specific configuration files (e.g., for VSCode)
+.vscode/
+
+# Ignore dependency management files
+__pycache__/
+
+# Ignore user-specific settings files
+*.swp
+
+# Ignore any additional temporary folders
 tmp/
-requirements.txt
