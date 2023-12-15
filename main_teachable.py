@@ -50,7 +50,7 @@ class TeachableAgent(ConversableAgent):
         self.user_comments = []
         self.register_reply(Agent, self._generate_teachable_assistant_reply, position=2)
 
-    def _generate_teachable_assistant_reply(
+    def _generate_teachable_assistant_reply(self, messages, sender, config):
         self,
         messages: Optional[List[Dict]] = None,
         sender: Optional[Agent] = None,
@@ -74,8 +74,8 @@ class TeachableAgent(ConversableAgent):
         self.user_comments.append(user_text)
 
         # Consider whether to retrieve something from the DB.
-        if self.memo_store.last_memo_id > 0:
-            new_user_text = self.consider_memo_retrieval(user_text)
+        self.memo_store.consider_storage(user_text, agent_text)
+            new_user_text = self.memo_store.consider_retrieval(user_text)
             if new_user_text != user_text:
                 # Make a copy of the message list, and replace the last user message with the new one.
                 messages = messages.copy()
@@ -118,6 +118,18 @@ class MemoStore:
                 self.last_memo_id = len(self.uid_text_dict)
                 if self.verbosity >= 3:
                     self.list_memos()
+
+    def consider_storage(self, input_text, output_text):
+        # Analyze the input and output text to decide whether to store the memo
+        if self._should_store(input_text, output_text):
+            self.add_input_output_pair(input_text, output_text)
+
+    def consider_retrieval(self, user_text):
+        # Analyze the user's text to decide whether to retrieve a memo
+        if self._should_retrieve(user_text):
+            return self.get_nearest_memo(user_text)
+        else:
+            return None
 
     def list_memos(self):
         """Prints the contents of MemoStore."""
