@@ -4,7 +4,6 @@ import pickle
 import asyncio
 import logging
 import spacy
-import chromadb
 from typing import Callable, Dict, Optional, Union, List, Tuple, Any
 from termcolor import colored
 from tqdm import tqdm
@@ -19,6 +18,55 @@ logging.basicConfig(filename='teachable_agent_session.log',
                     level=logging.INFO, 
                     format='%(asctime)s %(levelname)s:%(message)s')
 
+class EnhancedMemoStore:
+    def __init__(self, path_to_db_dir: str, reset_db: bool = False):
+        self.path_to_db_dir = path_to_db_dir
+        self.db_file = os.path.join(self.path_to_db_dir, "memostore.pkl")
+        self.memostore: Dict[str, str] = {}
+
+        if reset_db or not os.path.exists(self.db_file):
+            self.reset_db()
+        else:
+            self.load_memos()
+
+    def reset_db(self):
+        """Clear the memo store both in memory and on disk."""
+        self.memostore.clear()
+        self.save_memos()
+
+    def load_memos(self):
+        """Load memos from the disk."""
+        try:
+            with open(self.db_file, 'rb') as file:
+                self.memostore = pickle.load(file)
+        except (EOFError, FileNotFoundError):
+            self.memostore = {}
+
+    def save_memos(self):
+        """Save memos to the disk."""
+        with open(self.db_file, 'wb') as file:
+            pickle.dump(self.memostore, file)
+
+    def add_memo(self, key: str, value: str):
+        """Add a memo to the store."""
+        self.memostore[key] = value
+        self.save_memos()
+
+    def get_memo(self, key: str) -> Optional[str]:
+        """Retrieve a memo by key."""
+        return self.memostore.get(key)
+
+    def update_memo(self, key: str, new_value: str):
+        """Update an existing memo."""
+        if key in self.memostore:
+            self.memostore[key] = new_value
+            self.save_memos()
+
+    def delete_memo(self, key: str):
+        """Delete a memo from the store."""
+        if key in self.memostore:
+            del self.memostore[key]
+            self.save_memos()
 
 class TeachableAgent(ConversableAgent):
     def __init__(self, name="teachableagent", system_message=None, human_input_mode="NEVER",
@@ -30,33 +78,36 @@ class TeachableAgent(ConversableAgent):
         self._teach_config = teach_config or {}
         self.llm_config = llm_config
         self.analyzer_llm_config = analyzer_llm_config or llm_config  # Use llm_config if analyzer_llm_config is None
+        self.analyzer = TextAnalyzerAgent(llm_config=self.analyzer_llm_config)
+
         self._initialize_teachable_agent_config()
         self.memo_store = MemoStore(self.verbosity, self.reset_db, self.path_to_db_dir)
         self.user_comments = []
         self.register_reply(Agent, self._generate_teachable_assistant_reply, position=2)
 
     def _initialize_teachable_agent_config(self):
-        """
-        Initializes the configuration for the teachable agent.
-        """
         self.verbosity = self._teach_config.get("verbosity", 0)
         self.reset_db = self._teach_config.get("reset_db", False)
         self.path_to_db_dir = self._teach_config.get("path_to_db_dir", "./tmp/teachable_agent_db")
         self.prepopulate = self._teach_config.get("prepopulate", True)
         self.recall_threshold = self._teach_config.get("recall_threshold", 1.5)
         self.max_num_retrievals = self._teach_config.get("max_num_retrievals", 10)
-        self.analyzer = TextAnalyzerAgent(llm_config=self.analyzer_llm_config)
-        self.memo_store = MemoStore(self.verbosity, self.reset_db, self.path_to_db_dir)
-        self.user_comments = []
-        self.register_reply(Agent, self._generate_teachable_assistant_reply, position=2)
+
+        if self.prepopulate:
+            self.memo_store.prepopulate_db()
 
     def _generate_teachable_assistant_reply(self, messages, sender, config):
-        self,
-        messages: Optional[List[Dict]] = None,
-        sender: Optional[Agent] = None,
-        config: Optional[Any] = None,  # Persistent state.
-    ) -> Tuple[bool, Union[str, Dict, None]]:
-        
+        """
+        Generate a response for the TeachableAgent based on user input and memo retrieval.
+
+        Args:
+            messages (list of dict): List of messages in the conversation.
+            sender (Agent): The sender of the message.
+            config: Additional configuration or context.
+
+        Returns:
+            Tuple[bool, Union[str, Dict, None]]: A tuple containing a flag indicating success and the generated response.
+        """
         if self.llm_config is False:
             raise ValueError("TeachableAgent requires self.llm_config to be set in its base class.")
         if messages is None:
@@ -74,215 +125,17 @@ class TeachableAgent(ConversableAgent):
         self.user_comments.append(user_text)
 
         # Consider whether to retrieve something from the DB.
-        self.memo_store.consider_storage(user_text, agent_text)
-            new_user_text = self.memo_store.consider_retrieval(user_text)
-            if new_user_text != user_text:
-                # Make a copy of the message list, and replace the last user message with the new one.
-                messages = messages.copy()
-                messages[-1]["content"] = new_user_text
+        new_user_text = self.memo_store.consider_storage(user_text)
+        new_user_text = self.memo_store.consider_retrieval(user_text)
+        if new_user_text != user_text:
+            # Make a copy of the message list, and replace the last user message with the new one.
+            messages = messages.copy()
+            messages[-1]["content"] = new_user_text
 
         # Generate a response by reusing existing generate_oai_reply
         return self.generate_oai_reply(messages, sender, config)
 
-
-class MemoStore:
-
-    def __init__(self, verbosity, reset, path_to_db_dir):
-        """
-        Args:
-            - verbosity (Optional, int): 1 to print memory operations, 0 to omit them. 3+ to print memo lists.
-            - path_to_db_dir (Optional, str): path to the directory where the DB is stored.
-        """
-        self.verbosity = verbosity
-        self.reset = reset
-        self.path_to_db_dir = path_to_db_dir
-
-        # Load or create the vector DB on disk.
-        settings = Settings(
-            anonymized_telemetry=False, allow_reset=True, is_persistent=True, persist_directory=path_to_db_dir
-        )
-        self.db_client = chromadb.Client(settings)
-        self.vec_db = self.db_client.create_collection("memos", get_or_create=True)  # The collection is the DB.
-        if reset:
-            self.reset_db()
-
-        # Load or create the associated memo dict on disk.
-        self.path_to_dict = os.path.join(path_to_db_dir, "uid_text_dict.pkl")
-        self.uid_text_dict = {}
-        self.last_memo_id = 0
-        if (not reset) and os.path.exists(self.path_to_dict):
-            print(colored("\nLOADING MEMORY FROM DISK", "light_green"))
-            print(colored("    Location = {}".format(self.path_to_dict), "light_green"))
-            with open(self.path_to_dict, "rb") as f:
-                self.uid_text_dict = pickle.load(f)
-                self.last_memo_id = len(self.uid_text_dict)
-                if self.verbosity >= 3:
-                    self.list_memos()
-
-    def consider_storage(self, input_text, output_text):
-        # Analyze the input and output text to decide whether to store the memo
-        if self._should_store(input_text, output_text):
-            self.add_input_output_pair(input_text, output_text)
-
-    def consider_retrieval(self, user_text):
-        # Analyze the user's text to decide whether to retrieve a memo
-        if self._should_retrieve(user_text):
-            return self.get_nearest_memo(user_text)
-        else:
-            return None
-
-    def list_memos(self):
-        """Prints the contents of MemoStore."""
-        print(colored("LIST OF MEMOS", "light_green"))
-        for uid, text in self.uid_text_dict.items():
-            input_text, output_text = text
-            print(
-                colored(
-                    "  ID: {}\n    INPUT TEXT: {}\n    OUTPUT TEXT: {}".format(uid, input_text, output_text),
-                    "light_green",
-                )
-            )
-
-    def close(self):
-        """Saves self.uid_text_dict to disk."""
-        print(colored("\nSAVING MEMORY TO DISK", "light_green"))
-        print(colored("    Location = {}".format(self.path_to_dict), "light_green"))
-        with open(self.path_to_dict, "wb") as file:
-            pickle.dump(self.uid_text_dict, file)
-
-    def reset_db(self):
-        """Forces immediate deletion of the DB's contents, in memory and on disk."""
-        print(colored("\nCLEARING MEMORY", "light_green"))
-        self.db_client.delete_collection("memos")
-        self.vec_db = self.db_client.create_collection("memos")
-        self.uid_text_dict = {}
-
-    def add_input_output_pair(self, input_text, output_text):
-        """Adds an input-output pair to the vector DB."""
-        self.last_memo_id += 1
-        self.vec_db.add(documents=[input_text], ids=[str(self.last_memo_id)])
-        self.uid_text_dict[str(self.last_memo_id)] = input_text, output_text
-        if self.verbosity >= 1:
-            print(
-                colored(
-                    "\nINPUT-OUTPUT PAIR ADDED TO VECTOR DATABASE:\n  ID\n    {}\n  INPUT\n    {}\n  OUTPUT\n    {}".format(
-                        self.last_memo_id, input_text, output_text
-                    ),
-                    "light_green",
-                )
-            )
-        if self.verbosity >= 3:
-            self.list_memos()
-
-    def get_nearest_memo(self, query_text):
-        """Retrieves the nearest memo to the given query text."""
-        results = self.vec_db.query(query_texts=[query_text], n_results=1)
-        uid, input_text, distance = results["ids"][0][0], results["documents"][0][0], results["distances"][0][0]
-        input_text_2, output_text = self.uid_text_dict[uid]
-        assert input_text == input_text_2
-        if self.verbosity >= 1:
-            print(
-                colored(
-                    "\nINPUT-OUTPUT PAIR RETRIEVED FROM VECTOR DATABASE:\n  INPUT1\n    {}\n  OUTPUT\n    {}\n  DISTANCE\n    {}".format(
-                        input_text, output_text, distance
-                    ),
-                    "light_green",
-                )
-            )
-        return input_text, output_text, distance
-
-    def get_related_memos(self, query_text, n_results, threshold):
-        """Retrieves memos that are related to the given query text within the specified distance threshold."""
-        if n_results > len(self.uid_text_dict):
-            n_results = len(self.uid_text_dict)
-        results = self.vec_db.query(query_texts=[query_text], n_results=n_results)
-        memos = []
-        num_results = len(results["ids"][0])
-        for i in range(num_results):
-            uid, input_text, distance = results["ids"][0][i], results["documents"][0][i], results["distances"][0][i]
-            if distance < threshold:
-                input_text_2, output_text = self.uid_text_dict[uid]
-                assert input_text == input_text_2
-                if self.verbosity >= 1:
-                    print(
-                        colored(
-                            "\nINPUT-OUTPUT PAIR RETRIEVED FROM VECTOR DATABASE:\n  INPUT1\n    {}\n  OUTPUT\n    {}\n  DISTANCE\n    {}".format(
-                                input_text, output_text, distance
-                            ),
-                            "light_green",
-                        )
-                    )
-                memos.append((input_text, output_text, distance))
-        return memos
-    def __init__(self, verbosity, reset, path_to_db_dir):
-        self.verbosity = verbosity
-        self.reset = reset
-        self.path_to_db_dir = path_to_db_dir
-        self.path_to_dict = os.path.join(path_to_db_dir, "uid_text_dict.pkl")
-
-        # Initialize the database client and the vector database
-        settings = Settings(anonymized_telemetry=False, allow_reset=True, is_persistent=True, persist_directory=path_to_db_dir)
-        self.db_client = chromadb.Client(settings)
-        self.vec_db = self.db_client.create_collection("memos", get_or_create=True)
-
-        # Handle database reset if required
-        if reset:
-            self.reset_db()
-
-        # Load existing data from disk if not resetting
-        self.uid_text_dict = self._load_data_from_disk() if os.path.exists(self.path_to_dict) and not reset else {}
-        self.last_memo_id = len(self.uid_text_dict)
-
-    def _load_data_from_disk(self):
-        """Load memo data from disk."""
-        with open(self.path_to_dict, "rb") as f:
-            return pickle.load(f)
-
-    def add_input_output_pair(self, input_text, output_text):
-        """Add a new input-output pair to the database."""
-        self.last_memo_id += 1
-        self.vec_db.add([input_text], [str(self.last_memo_id)])
-        self.uid_text_dict[str(self.last_memo_id)] = (input_text, output_text)
-        self._save_data_to_disk()
-
-    def get_related_memos(self, query_text, n_results, threshold):
-        """Retrieve related memos based on a query text."""
-        results = self.vec_db.query([query_text], n_results)
-        return [(self.uid_text_dict[str(uid)], distance) for uid, _, distance in results if distance < threshold]
-
-    def reset_db(self):
-        """Reset the memo database."""
-        self.db_client.delete_collection("memos")
-        self.vec_db = self.db_client.create_collection("memos", get_or_create=True)
-        self.uid_text_dict = {}
-        self._save_data_to_disk()
-
-    def _save_data_to_disk(self):
-        """Save memo data to disk."""
-        with open(self.path_to_dict, "wb") as file:
-            pickle.dump(self.uid_text_dict, file)
-
-    def list_memos(self):
-        """Prints all stored memos for debugging purposes."""
-        if self.verbosity >= 1:
-            print("Stored Memos:")
-            for uid, (input_text, output_text) in self.uid_text_dict.items():
-                print(f"ID: {uid}\nInput: {input_text}\nOutput: {output_text}\n")
-
-def check_agent_response(teachable_agent, user, correct_answer, assert_on_error=False):
-    """
-    Checks whether the agent's response contains the correct answer.
-    :param assert_on_error: Set to True to raise an assertion error if the check fails.
-    """
-    agent_response = user.last_message(teachable_agent)["content"]
-    if correct_answer not in agent_response:
-        print(colored(f"\nTEST FAILED: EXPECTED ANSWER {correct_answer} NOT FOUND IN AGENT RESPONSE", "light_red"))
-        if assert_on_error:
-            assert correct_answer in agent_response
-        return 1
-    else:
-        print(colored(f"\nTEST PASSED: EXPECTED ANSWER {correct_answer} FOUND IN AGENT RESPONSE", "light_cyan"))
-        return 0
+    
 
 def use_question_answer_phrasing():
     teachable_agent = create_teachable_agent(reset_db=True)
@@ -312,6 +165,21 @@ def create_teachable_agent(reset_db=False, verbosity=0):
         }
     )
     return teachable_agent
+
+def check_agent_response(teachable_agent, user, correct_answer, assert_on_error=False):
+    """
+    Checks whether the agent's response contains the correct answer.
+    :param assert_on_error: Set to True to raise an assertion error if the check fails.
+    """
+    agent_response = user.last_message(teachable_agent)["content"]
+    if correct_answer not in agent_response:
+        print(colored(f"\nTEST FAILED: EXPECTED ANSWER {correct_answer} NOT FOUND IN AGENT RESPONSE", "light_red"))
+        if assert_on_error:
+            assert correct_answer in agent_response
+        return 1
+    else:
+        print(colored(f"\nTEST PASSED: EXPECTED ANSWER {correct_answer} FOUND IN AGENT RESPONSE", "light_cyan"))
+        return 0
 
 def initiate_interactive_session(teachable_agent):
     user = ConversableAgent("user", human_input_mode="ALWAYS")
