@@ -29,3 +29,5 @@ __pycache__/
 
 # Ignore any additional temporary folders
 tmp/
+
+LENOX/LENOX/
