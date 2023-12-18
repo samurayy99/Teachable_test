@@ -4,6 +4,7 @@ import logging
 import nltk
 import spacy
 import html
+import json
 from dotenv import load_dotenv
 from termcolor import colored
 from transformers import BertTokenizer, BertModel, pipeline
